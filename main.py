@@ -11,7 +11,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 from src.datasets import ThingsMEGDataset
-from src.models import BasicConvClassifier
+from src.models import WaveformClassifier, BasicConvClassifier
 from src.utils import set_seed
 
 
@@ -57,8 +57,11 @@ def run(args: DictConfig):
     # ------------------
     #       Model
     # ------------------
-    model = BasicConvClassifier(
-        train_set.num_classes, train_set.seq_len, train_set.num_channels
+    # model = BasicConvClassifier(
+    #     train_set.num_classes, train_set.seq_len, train_set.num_channels
+    # ).to(args.device)
+    model = WaveformClassifier(
+        train_set.num_channels, args.hidden_size, args.num_layers, train_set.num_classes
     ).to(args.device)
 
     # ------------------
