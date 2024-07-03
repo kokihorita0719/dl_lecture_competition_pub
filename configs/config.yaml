@@ -1,5 +1,6 @@
 batch_size: 128
 epochs: 80
+# epochs: 1
 lr: 0.001
 
 device: cuda:0
@@ -8,6 +9,9 @@ seed: 1234
 use_wandb: False
 
 data_dir: data
+
+use_freq_domain_features: False
+use_statistical_features: True
 
 # Evaluation
 model_path: 

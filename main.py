@@ -8,9 +8,13 @@ from omegaconf import DictConfig
 import wandb
 from termcolor import cprint
 from tqdm import tqdm
+from torch.optim.lr_scheduler import OneCycleLR
 
 from src.datasets import ThingsMEGDataset
+from src.datasets import PretrainingDataset
 from src.models import BasicConvClassifier
+from src.models import AdvancedConvClassifier 
+from src.models import TransformerClassifier, LSTMClassifier, SpeechTransformer
 from src.utils import set_seed
 
 
@@ -25,6 +29,11 @@ def run(args: DictConfig):
     # ------------------
     #    Dataloader
     # ------------------
+    # pre_training_train_dataset = PretrainingDataset(split='train', data_dir=args.data_dir)
+
+    # # Create a dataset for validation split
+    # pre_training_val_dataset = PretrainingDataset(split='val', data_dir=args.data_dir)
+
     loader_args = {"batch_size": args.batch_size, "num_workers": args.num_workers}
     
     train_set = ThingsMEGDataset("train", args.data_dir)
@@ -39,15 +48,21 @@ def run(args: DictConfig):
     # ------------------
     #       Model
     # ------------------
-    model = BasicConvClassifier(
-        train_set.num_classes, train_set.seq_len, train_set.num_channels
-    ).to(args.device)
+    # model = AdvancedConvClassifier(
+    #     train_set.num_classes, train_set.seq_len, train_set.num_channels
+    # ).to(args.device)
+    # model = TransformerClassifier(train_set.num_classes, train_set.seq_len, train_set.num_channels).to(args.device)
+    model = SpeechTransformer(train_set.num_classes, train_set.seq_len, train_set.num_channels).to(args.device)
+    # model = LSTMClassifier(train_set.num_classes, train_set.seq_len, train_set.num_channels).to(args.device)
 
     # ------------------
     #     Optimizer
     # ------------------
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-
+    weight_decay = 1e-5
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=weight_decay)
+    # OneCycleLRスケジューラーの設定
+    scheduler = OneCycleLR(optimizer, max_lr=args.lr, steps_per_epoch=len(train_loader), epochs=args.epochs)
+    
     # ------------------
     #   Start training
     # ------------------  
@@ -56,16 +71,19 @@ def run(args: DictConfig):
         task="multiclass", num_classes=train_set.num_classes, top_k=10
     ).to(args.device)
       
+    # main.pyの訓練ループ部分
     for epoch in range(args.epochs):
         print(f"Epoch {epoch+1}/{args.epochs}")
         
         train_loss, train_acc, val_loss, val_acc = [], [], [], []
         
         model.train()
-        for X, y, subject_idxs in tqdm(train_loader, desc="Train"):
+        for X, freq_domain_features, statistical_features, y, subject_idxs in tqdm(train_loader, desc="Train"):
             X, y = X.to(args.device), y.to(args.device)
+            freq_domain_features, statistical_features = freq_domain_features.to(args.device), statistical_features.to(args.device)
 
-            y_pred = model(X)
+            # モデルに周波数領域の特徴量と統計的特徴量を組み込む
+            y_pred = model(X, freq_domain_features if args.use_freq_domain_features else None, statistical_features if args.use_statistical_features else None)
             
             loss = F.cross_entropy(y_pred, y)
             train_loss.append(loss.item())
@@ -73,16 +91,19 @@ def run(args: DictConfig):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            scheduler.step()
             
             acc = accuracy(y_pred, y)
             train_acc.append(acc.item())
 
         model.eval()
-        for X, y, subject_idxs in tqdm(val_loader, desc="Validation"):
+        for X, freq_domain_features, statistical_features, y, subject_idxs in tqdm(val_loader, desc="Validation"):
             X, y = X.to(args.device), y.to(args.device)
-            
+            freq_domain_features, statistical_features = freq_domain_features.to(args.device), statistical_features.to(args.device)
+
             with torch.no_grad():
-                y_pred = model(X)
+                # モデルに周波数領域の特徴量と統計的特徴量を組み込む
+                y_pred = model(X, freq_domain_features if args.use_freq_domain_features else None, statistical_features if args.use_statistical_features else None)
             
             val_loss.append(F.cross_entropy(y_pred, y).item())
             val_acc.append(accuracy(y_pred, y).item())
