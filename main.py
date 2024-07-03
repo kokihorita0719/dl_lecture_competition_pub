@@ -14,6 +14,10 @@ from src.datasets import ThingsMEGDataset
 from src.models import WaveformClassifier, BasicConvClassifier
 from src.utils import set_seed
 
+def to_one_hot(indices, num_classes):
+    one_hot = torch.zeros(indices.shape[0], num_classes)
+    one_hot.scatter_(1, indices.unsqueeze(1), 1)
+    return one_hot
 
 @hydra.main(version_base=None, config_path="configs", config_name="config")
 def run(args: DictConfig):
@@ -61,7 +65,7 @@ def run(args: DictConfig):
     #     train_set.num_classes, train_set.seq_len, train_set.num_channels
     # ).to(args.device)
     model = WaveformClassifier(
-        train_set.num_channels, args.hidden_size, args.num_layers, train_set.num_classes
+        train_set.num_channels + 4, args.hidden_size, args.num_layers, train_set.num_classes
     ).to(args.device)
 
     # ------------------
@@ -85,6 +89,9 @@ def run(args: DictConfig):
         model.train()
         for X, y, subject_idxs in tqdm(train_loader, desc="Train"):
             X, y = X.to(args.device), y.to(args.device)
+            subject_idxs = to_one_hot(subject_idxs, 4).to(args.device)  # Assuming there are 4 subjects
+            subject_idxs = subject_idxs.unsqueeze(2).expand(-1, -1, X.shape[2])  # Expand the dimensions of subject indices to match the dimensions of X
+            X = torch.cat([X, subject_idxs], dim=1)
 
             y_pred = model(X)
             
@@ -101,6 +108,9 @@ def run(args: DictConfig):
         model.eval()
         for X, y, subject_idxs in tqdm(val_loader, desc="Validation"):
             X, y = X.to(args.device), y.to(args.device)
+            subject_idxs = to_one_hot(subject_idxs, 4).to(args.device)  # Assuming there are 4 subjects
+            subject_idxs = subject_idxs.unsqueeze(2).expand(-1, -1, X.shape[2])  # Expand the dimensions of subject indices to match the dimensions of X
+            X = torch.cat([X, subject_idxs], dim=1)
             
             with torch.no_grad():
                 y_pred = model(X)

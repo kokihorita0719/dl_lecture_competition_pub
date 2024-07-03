@@ -10,12 +10,13 @@ class BasicConvClassifier(nn.Module):
         num_classes: int,
         seq_len: int,
         in_channels: int,
-        hid_dim: int = 128
+        hid_dim: int = 128,
+        num_subjects: int = 4  # Assuming there are 4 subjects
     ) -> None:
         super().__init__()
 
         self.blocks = nn.Sequential(
-            ConvBlock(in_channels, hid_dim),
+            ConvBlock(in_channels + num_subjects, hid_dim),  # Add subject information here
             ConvBlock(hid_dim, hid_dim),
         )
 

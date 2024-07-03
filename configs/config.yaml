@@ -6,8 +6,8 @@ device: cuda:0
 num_workers: 4
 seed: 1234
 use_wandb: False
-hidden_size: 100
-num_layers: 10
+hidden_size: 128
+num_layers: 2
 
 data_dir: data
 
