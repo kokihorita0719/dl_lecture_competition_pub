@@ -11,7 +11,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 from src.datasets import ThingsMEGDataset
-from src.models import WaveformClassifier, BasicConvClassifier
+from src.models import WaveformClassifier, BasicConvClassifier, TransformerModel
 from src.utils import set_seed
 
 def to_one_hot(indices, num_classes):
@@ -64,8 +64,15 @@ def run(args: DictConfig):
     # model = BasicConvClassifier(
     #     train_set.num_classes, train_set.seq_len, train_set.num_channels
     # ).to(args.device)
-    model = WaveformClassifier(
-        train_set.num_channels + 4, args.hidden_size, args.num_layers, train_set.num_classes
+    # model = WaveformClassifier(
+    #     train_set.num_channels + 4, args.hidden_size, args.num_layers, train_set.num_classes
+    # ).to(args.device)
+    model = TransformerModel(
+        ntoken=train_set.num_classes,
+        ninp=281,  # Make sure this is divisible by nhead
+        nhead=1,
+        nhid=2048,
+        nlayers=6,
     ).to(args.device)
 
     # ------------------
