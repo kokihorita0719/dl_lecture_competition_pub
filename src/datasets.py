@@ -24,6 +24,14 @@ class ThingsMEGDataset(torch.utils.data.Dataset):
         return len(self.X)
 
     def __getitem__(self, i):
+        X = self.X[i]
+        if self.split in ["train", "val"]:
+            # データを標準化
+            X = (X - X.mean(dim=1, keepdim=True)) / (X.std(dim=1, keepdim=True) + 1e-8)
+            return X, self.y[i], self.subject_idxs[i]
+        else:
+            # データを標準化
+            X = (X - X.mean(dim=1, keepdim=True)) / (X.std(dim=1, keepdim=True) + 1e-8)
         if hasattr(self, "y"):
             return self.X[i], self.y[i], self.subject_idxs[i]
         else:

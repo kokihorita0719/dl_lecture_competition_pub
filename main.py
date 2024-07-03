@@ -8,6 +8,7 @@ from omegaconf import DictConfig
 import wandb
 from termcolor import cprint
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 from src.datasets import ThingsMEGDataset
 from src.models import BasicConvClassifier
@@ -28,6 +29,23 @@ def run(args: DictConfig):
     loader_args = {"batch_size": args.batch_size, "num_workers": args.num_workers}
     
     train_set = ThingsMEGDataset("train", args.data_dir)
+    # 最初のサンプルを取得
+    X, y, subject_idxs = train_set[0]
+    print("X.size: ", X.size())
+
+    # データの可視化
+    plt.figure(figsize=(10, 4))
+    # 最初の3つのチャネルのデータをプロット
+    for i in range(10):
+        plt.plot(X[i], label=f'Channel {i+1}')
+    
+    plt.title(f"Class: {y}")
+    plt.xlabel("Time")
+    plt.ylabel("Amplitude")
+    plt.legend() 
+    # plt.show()
+    plt.savefig("plot.png")  # プロットを画像ファイルとして保存
+
     train_loader = torch.utils.data.DataLoader(train_set, shuffle=True, **loader_args)
     val_set = ThingsMEGDataset("val", args.data_dir)
     val_loader = torch.utils.data.DataLoader(val_set, shuffle=False, **loader_args)
