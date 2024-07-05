@@ -9,10 +9,14 @@ import wandb
 from termcolor import cprint
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+from sklearn.manifold import TSNE  # Import t-SNE
+from sklearn.decomposition import PCA
 
 from src.datasets import ThingsMEGDataset
 from src.models import WaveformClassifier, BasicConvClassifier, TransformerModel
 from src.utils import set_seed
+
+N_FEATURES = 12
 
 def to_one_hot(indices, num_classes):
     one_hot = torch.zeros(indices.shape[0], num_classes)
@@ -62,15 +66,15 @@ def run(args: DictConfig):
     #       Model
     # ------------------
     # model = BasicConvClassifier(
-    #     train_set.num_classes, train_set.seq_len, train_set.num_channels
+    #     train_set.num_classes, train_set.seq_len, N_FEATURES
     # ).to(args.device)
     # model = WaveformClassifier(
-    #     train_set.num_channels + 4, args.hidden_size, args.num_layers, train_set.num_classes
+    #     N_FEATURES + 4, args.hidden_size, args.num_layers, train_set.num_classes
     # ).to(args.device)
     model = TransformerModel(
         ntoken=train_set.num_classes,
-        ninp=281,  # Make sure this is divisible by nhead
-        nhead=1,
+        ninp=N_FEATURES + 4,  # Set to 64 for t-SNE dimensionality reduction
+        nhead=8,
         nhid=2048,
         nlayers=6,
     ).to(args.device)
@@ -87,7 +91,8 @@ def run(args: DictConfig):
     accuracy = Accuracy(
         task="multiclass", num_classes=train_set.num_classes, top_k=10
     ).to(args.device)
-      
+    # 以下のコードを追加します
+    pca = PCA(n_components=N_FEATURES, svd_solver='randomized')  # PCAオブジェクトを作成し、主成分の数を32に設定
     for epoch in range(args.epochs):
         print(f"Epoch {epoch+1}/{args.epochs}")
         
@@ -97,6 +102,14 @@ def run(args: DictConfig):
         for X, y, subject_idxs in tqdm(train_loader, desc="Train"):
             X, y = X.to(args.device), y.to(args.device)
             subject_idxs = to_one_hot(subject_idxs, 4).to(args.device)  # Assuming there are 4 subjects
+
+            # PCAを適用して特徴量の次元を削減
+            original_shape = X.shape
+            X = X.view(original_shape[0], -1)  # バッチサイズとそれ以外の次元を結合
+            X = X.cpu().numpy()  # Convert the tensor to numpy array on CPU
+            X = pca.fit_transform(X)
+            X = torch.from_numpy(X).to(args.device).view(original_shape[0], N_FEATURES, -1)  # Convert the numpy array back to tensor and reshape it
+
             subject_idxs = subject_idxs.unsqueeze(2).expand(-1, -1, X.shape[2])  # Expand the dimensions of subject indices to match the dimensions of X
             X = torch.cat([X, subject_idxs], dim=1)
 
@@ -116,6 +129,14 @@ def run(args: DictConfig):
         for X, y, subject_idxs in tqdm(val_loader, desc="Validation"):
             X, y = X.to(args.device), y.to(args.device)
             subject_idxs = to_one_hot(subject_idxs, 4).to(args.device)  # Assuming there are 4 subjects
+
+            # PCAを適用して特徴量の次元を削減
+            original_shape = X.shape
+            X = X.view(original_shape[0], -1)  # バッチサイズとそれ以外の次元を結合
+            X = X.cpu().numpy()  # Convert the tensor to numpy array on CPU
+            X = pca.transform(X)
+            X = torch.from_numpy(X).to(args.device).view(original_shape[0], N_FEATURES, -1)  # Convert the numpy array back to tensor and reshape it
+
             subject_idxs = subject_idxs.unsqueeze(2).expand(-1, -1, X.shape[2])  # Expand the dimensions of subject indices to match the dimensions of X
             X = torch.cat([X, subject_idxs], dim=1)
             
