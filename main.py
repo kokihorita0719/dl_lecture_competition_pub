@@ -16,12 +16,24 @@ from src.datasets import ThingsMEGDataset
 from src.models import WaveformClassifier, BasicConvClassifier, ConvTransformer
 from src.utils import set_seed
 
-N_FEATURES = 60
+N_FEATURES = 28
 
 def to_one_hot(indices, num_classes):
     one_hot = torch.zeros(indices.shape[0], num_classes)
     one_hot.scatter_(1, indices.unsqueeze(1), 1)
     return one_hot
+
+class NoamScheduler:
+    def __init__(self, model_size, warmup_steps, factor=1):
+        self.model_size = model_size
+        self.warmup_steps = warmup_steps
+        self.factor = factor
+        self.current_step = 0
+
+    def step(self):
+        self.current_step += 1
+        lr = self.factor * (self.model_size ** -0.5) * min(self.current_step ** -0.5, self.current_step * self.warmup_steps ** -1.5)
+        return lr
 
 @hydra.main(version_base=None, config_path="configs", config_name="config")
 def run(args: DictConfig):
@@ -75,14 +87,17 @@ def run(args: DictConfig):
         nclasses=train_set.num_classes,  # 分類するクラスの数
         ninp=N_FEATURES + 4,  # 入力の次元数
         nhead=8,  # Transformerのヘッドの数
-        nhid=1024,  # Transformerの隠れ層の次元数
-        nlayers=6,  # Transformerの層の数
+        nhid=512,  # Transformerの隠れ層の次元数
+        nlayers=3,  # Transformerの層の数
     ).to(args.device)  # モデルをデバイス（CPUまたはGPU）に移動
 
     # ------------------
     #     Optimizer
     # ------------------
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    # optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, betas=(0.9, 0.98), eps=1e-9)
+    # スケジューラを定義
+    scheduler = NoamScheduler(model_size=512, warmup_steps=4000)
 
     # ------------------
     #   Start training
@@ -120,6 +135,11 @@ def run(args: DictConfig):
             
             optimizer.zero_grad()
             loss.backward()
+            
+            # スケジューラから学習率を取得し、オプティマイザの学習率を更新
+            lr = scheduler.step()
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = lr
             optimizer.step()
             
             acc = accuracy(y_pred, y)
