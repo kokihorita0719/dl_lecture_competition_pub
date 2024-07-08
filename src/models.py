@@ -99,38 +99,18 @@ class WaveformClassifier(nn.Module):
         out = out[:, -1, :]
         out = self.fc(out)
         return out
-    
-class PositionalEncoding(nn.Module):
-    def __init__(self, d_model, dropout=0.1, max_len=5000):
-        super(PositionalEncoding, self).__init__()
-        self.dropout = nn.Dropout(p=dropout)
 
-        pe = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
-        pe[:, 0::2] = torch.sin(position * div_term)
-        if d_model % 2 == 0:
-            pe[:, 1::2] = torch.cos(position * div_term)
-        else:
-            pe[:, 1::2] = torch.cos(position * div_term)[:, :-1]
-        pe = pe.unsqueeze(0).transpose(0, 1)
-        self.register_buffer('pe', pe)
-
-    def forward(self, x):
-        x = x + self.pe[:x.size(0), :,:x.size(2)]
-        return self.dropout(x)
-
-class TransformerModel(nn.Module):
-    def __init__(self, ntoken, ninp, nhead, nhid, nlayers, dropout=0.5):
-        super(TransformerModel, self).__init__()
-        from torch.nn import TransformerEncoder, TransformerEncoderLayer
+class ConvTransformer(nn.Module):
+    def __init__(self, nclasses, ninp, nhead, nhid, nlayers, dropout=0.5):
+        super(ConvTransformer, self).__init__()
         self.model_type = 'Transformer'
         self.src_mask = None
-        self.pos_encoder = PositionalEncoding(ninp, dropout)
-        encoder_layers = TransformerEncoderLayer(ninp, nhead, nhid, dropout)
+        self.encoder = nn.Linear(ninp, nhid)  # 入力の次元数をnhidに変換
+        self.pos_encoder = PositionalEncoding(nhid, dropout)  # PositionalEncodingもnhid次元の入力を期待
+        encoder_layers = TransformerEncoderLayer(nhid, nhead, nhid, dropout)  # TransformerEncoderLayerもnhid次元の入力を期待
         self.transformer_encoder = TransformerEncoder(encoder_layers, nlayers)
-        self.ninp = ninp
-        self.decoder = nn.Linear(ninp, ntoken)
+        self.encoder = nn.Linear(ninp, nhid)
+        self.decoder = nn.Linear(nhid, nclasses)
 
         self.init_weights()
 
@@ -141,6 +121,8 @@ class TransformerModel(nn.Module):
 
     def init_weights(self):
         initrange = 0.1
+        self.encoder.bias.data.zero_()
+        self.encoder.weight.data.uniform_(-initrange, initrange)
         self.decoder.bias.data.zero_()
         self.decoder.weight.data.uniform_(-initrange, initrange)
 
@@ -150,8 +132,28 @@ class TransformerModel(nn.Module):
             mask = self._generate_square_subsequent_mask(len(src)).to(device)
             self.src_mask = mask
 
+        src = src.view(src.size(0), -1)  # Add this line to reshape src
+        src = self.encoder(src)
         src = self.pos_encoder(src)
         output = self.transformer_encoder(src, self.src_mask)
-        output = output.mean(dim=1)  # Apply global average pooling along the sequence length dimension
+        output = output[:, -1, :]  # Add this line to use only the last output of each sequence
         output = self.decoder(output)
         return output
+
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, dropout=0.1, max_len=5000):
+        super(PositionalEncoding, self).__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0).transpose(0, 1)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        x = x + self.pe[:x.size(0), :]  # Change this line
+        return self.dropout(x)

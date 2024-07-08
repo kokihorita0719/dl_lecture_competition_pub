@@ -13,10 +13,10 @@ from sklearn.manifold import TSNE  # Import t-SNE
 from sklearn.decomposition import PCA
 
 from src.datasets import ThingsMEGDataset
-from src.models import WaveformClassifier, BasicConvClassifier, TransformerModel
+from src.models import WaveformClassifier, BasicConvClassifier, ConvTransformer
 from src.utils import set_seed
 
-N_FEATURES = 12
+N_FEATURES = 60
 
 def to_one_hot(indices, num_classes):
     one_hot = torch.zeros(indices.shape[0], num_classes)
@@ -71,13 +71,13 @@ def run(args: DictConfig):
     # model = WaveformClassifier(
     #     N_FEATURES + 4, args.hidden_size, args.num_layers, train_set.num_classes
     # ).to(args.device)
-    model = TransformerModel(
-        ntoken=train_set.num_classes,
-        ninp=N_FEATURES + 4,  # Set to 64 for t-SNE dimensionality reduction
-        nhead=8,
-        nhid=2048,
-        nlayers=6,
-    ).to(args.device)
+    model = ConvTransformer(
+        nclasses=train_set.num_classes,  # 分類するクラスの数
+        ninp=N_FEATURES + 4,  # 入力の次元数
+        nhead=8,  # Transformerのヘッドの数
+        nhid=1024,  # Transformerの隠れ層の次元数
+        nlayers=6,  # Transformerの層の数
+    ).to(args.device)  # モデルをデバイス（CPUまたはGPU）に移動
 
     # ------------------
     #     Optimizer
