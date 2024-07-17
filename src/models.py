@@ -132,7 +132,7 @@ class ConvTransformer(nn.Module):
             mask = self._generate_square_subsequent_mask(len(src)).to(device)
             self.src_mask = mask
 
-        src = src.view(src.size(0), -1)  # Add this line to reshape src
+        src = src.view(src.size(0), -1, self.encoder.in_features)  # Add this line to reshape src
         src = self.encoder(src)
         src = self.pos_encoder(src)
         output = self.transformer_encoder(src, self.src_mask)

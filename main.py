@@ -87,8 +87,8 @@ def run(args: DictConfig):
         nclasses=train_set.num_classes,  # 分類するクラスの数
         ninp=N_FEATURES + 4,  # 入力の次元数
         nhead=8,  # Transformerのヘッドの数
-        nhid=512,  # Transformerの隠れ層の次元数
-        nlayers=3,  # Transformerの層の数
+        nhid=1024,  # Transformerの隠れ層の次元数
+        nlayers=6,  # Transformerの層の数
     ).to(args.device)  # モデルをデバイス（CPUまたはGPU）に移動
 
     # ------------------
@@ -184,7 +184,18 @@ def run(args: DictConfig):
 
     preds = [] 
     model.eval()
-    for X, subject_idxs in tqdm(test_loader, desc="Validation"):        
+    for X, subject_idxs in tqdm(test_loader, desc="Validation"):
+        subject_idxs = to_one_hot(subject_idxs, 4).to(args.device)  # Assuming there are 4 subjects
+
+        # PCAを適用して特徴量の次元を削減
+        original_shape = X.shape
+        X = X.view(original_shape[0], -1)  # バッチサイズとそれ以外の次元を結合
+        X = X.cpu().numpy()  # Convert the tensor to numpy array on CPU
+        X = pca.transform(X)
+        X = torch.from_numpy(X).to(args.device).view(original_shape[0], N_FEATURES, -1)  # Convert the numpy array back to tensor and reshape it
+
+        subject_idxs = subject_idxs.unsqueeze(2).expand(-1, -1, X.shape[2])  # Expand the dimensions of subject indices to match the dimensions of X
+        X = torch.cat([X, subject_idxs], dim=1)     
         preds.append(model(X.to(args.device)).detach().cpu())
         
     preds = torch.cat(preds, dim=0).numpy()
